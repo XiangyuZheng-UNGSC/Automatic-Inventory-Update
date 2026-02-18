@@ -1,0 +1,20 @@
+name: 我的第一个 Action (My First Action)
+
+# 1. 触发条件 (THE TRIGGER)：什么时候运行？
+on: 
+  push:
+    branches:
+      - main # 每次有人保存（推送）代码到 main 分支时运行
+
+# 2. 任务 (THE JOBS)：服务器应该做什么？
+jobs:
+  say-hello:
+    runs-on: ubuntu-latest # GitHub 会为你提供一台临时的 Linux 电脑
+    
+    # 3. 步骤 (THE STEPS)：输入到那台电脑里的具体指令
+    steps:
+      - name: 打印问候语 (Print a greeting)
+        run: echo "Hello, World! 我刚刚构建了我的第一个 GitHub Action！"
+        
+      - name: 打印当前系统时间 (Print the current system time)
+        run: date
