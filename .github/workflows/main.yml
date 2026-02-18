@@ -1,20 +1,31 @@
-name: 我的第一个 Action (My First Action)
+name: 自动处理新的 Excel 文件
 
-# 1. 触发条件 (THE TRIGGER)：什么时候运行？
-on: 
+# 1. 触发条件
+on:
   push:
     branches:
-      - main # 每次有人保存（推送）代码到 main 分支时运行
+      - main # 监控 main 分支
+    paths:
+      - 'data/**/*.xlsx' # 核心秘诀：只有当 data 文件夹下的 .xlsx 文件被新增或修改时，才触发！
+      - 'data/**/*.xls'  # 兼容老版本的 Excel 格式
 
-# 2. 任务 (THE JOBS)：服务器应该做什么？
 jobs:
-  say-hello:
-    runs-on: ubuntu-latest # GitHub 会为你提供一台临时的 Linux 电脑
+  run-python-script:
+    runs-on: ubuntu-latest 
     
-    # 3. 步骤 (THE STEPS)：输入到那台电脑里的具体指令
     steps:
-      - name: 打印问候语 (Print a greeting)
-        run: echo "Hello, World! 我刚刚构建了我的第一个 GitHub Action！"
+      - name: 1. 检出代码 (把你的文件下载到云端服务器)
+        uses: actions/checkout@v4
         
-      - name: 打印当前系统时间 (Print the current system time)
-        run: date
+      - name: 2. 安装 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: 3. 安装必要的 Python 库 (例如处理 Excel 常用的库)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl # 如果你的脚本用到这些库，必须在这里安装
+          
+      - name: 4. 执行你的 Python 脚本
+        run: python process_data.py
