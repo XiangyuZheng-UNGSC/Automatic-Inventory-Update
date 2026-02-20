@@ -1,4 +1,3 @@
-name: 自动处理新的 Excel 文件
 name: Auto-Update Asset Inventory
 
 # This tells GitHub to run the script ONLY when these specific files are pushed/updated
