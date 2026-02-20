@@ -9,7 +9,8 @@ on:
       - '*VMs all discovered.csv'
       - '*latest_agents*.csv'
       - 'process_inventory.py'
-
+permissions:
+  contents: write
 jobs:
   run-inventory-script:
     runs-on: ubuntu-latest # Spins up a temporary Linux server
