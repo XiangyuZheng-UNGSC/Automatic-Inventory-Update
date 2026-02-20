@@ -6,8 +6,14 @@ on:
     paths:
       - 'Asset_Inventory.csv'
       - '*vSphere World.csv'
-      - '*VMs all discovered.csv'
+      - '*vSphere World*.xlsx'
+      - '*VM Inventory*.csv'
+      - '*VM Inventory*.xlsx'
+      - '*VMs all discovered*.csv'
+      - '*Proxmox*.xlsx'
+      - '*Proxmox*.csv'
       - '*latest_agents*.csv'
+      - '*latest_agents*.xlsx'
       - 'process_inventory.py'
 permissions:
   contents: write
