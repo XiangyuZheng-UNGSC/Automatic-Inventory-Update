@@ -22,8 +22,8 @@ def process_asset_inventory():
     df_inv = pd.read_csv(inv_file, engine='python', on_bad_lines='warn')
 
     # Dynamically fetch the latest source files
-    vmware_file = get_latest_file('*vSphere World.csv')
-    proxmox_file = get_latest_file('*VMs all discovered*.csv')
+    vmware_file = get_latest_file('*VM Inventory.csv')
+    proxmox_file = get_latest_file('*Proxmox*.csv')
     ths_file = get_latest_file('*latest_agents*.csv')
 
     # Prepare empty dataframes in case a file is missing
@@ -39,9 +39,12 @@ def process_asset_inventory():
         
         if 'Power state' in df_vmware.columns:
             df_vmware = df_vmware[df_vmware['Power state'].str.strip().str.lower() == 'powered on']
-            
-        if 'SRM Placeholder' in df_vmware.columns:
-            df_vmware = df_vmware[~df_vmware['SRM Placeholder'].astype(str).str.lower().isin(['true', '1'])]
+ 
+        if 'Replica' in df_vmware.columns:
+            df_vmware = df_vmware[df_vmware['Replica'].str.strip().str.lower() == 'False']
+    
+        if 'Template' in df_vmware.columns:
+            df_vmware = df_vmware[df_vmware['Template'].str.strip().str.lower() == 'False']
             
         df_vmware = df_vmware[~df_vmware['Name'].str.contains('template|replica|migrated', case=False, na=False)]
         
@@ -65,8 +68,22 @@ def process_asset_inventory():
         # Build VMware 'Location' column based on Cluster prefix
         if 'Cluster' in df_vmware_final.columns:
             cluster_upper = df_vmware_final['Cluster'].astype(str).str.upper()
-            cond_brindisi = cluster_upper.str.startswith('BDS') | (cluster_upper == 'DFS-VCS-01') | (cluster_upper == 'DEC')
-            cond_valencia = cluster_upper.str.startswith('VLC') | (cluster_upper == 'DFS-VCS-51') | (cluster_upper == 'EDCV')
+            
+            # Condition for Valencia: Starts with 'VLC', exactly matches 'DFS-VCS-51', or contains 'EDCV'
+            cond_valencia = (
+                cluster_upper.str.startswith('VLC') | 
+                (cluster_upper == 'DFS-VCS-51') | 
+                cluster_upper.str.contains('EDCV', na=False)
+            )
+            
+            # Condition for Brindisi: Starts with 'BDS', exactly matches 'DFS-VCS-01', 
+            # or contains 'EDC' (but explicitly MUST NOT contain 'EDCV' to prevent overlap)
+            cond_brindisi = (
+                cluster_upper.str.startswith('BDS') | 
+                (cluster_upper == 'DFS-VCS-01') | 
+                (cluster_upper.str.contains('EDC', na=False) & ~cluster_upper.str.contains('EDCV', na=False))
+            )
+            
             df_vmware_final['Location'] = np.select([cond_brindisi, cond_valencia], ['Brindisi', 'Valencia'], default='Unknown')
         
         df_vmware_final['Technology_Source'] = 'VMware'
@@ -78,22 +95,19 @@ def process_asset_inventory():
     # STEP 2: PROXMOX PROCESSING LOGIC
     # ==========================================
     if proxmox_file:
-        print(f"Found Proxmox file: {proxmox_file}. Processing...")
-        df_proxmox = pd.read_csv(proxmox_file, engine='python', on_bad_lines='warn')
+        print(f"Found Proxmox Excel file: {proxmox_file}. Processing specific sheet...")
+        # Read the specific sheet and skip the first 3 rows
+        df_proxmox = pd.read_excel(proxmox_file, sheet_name='VMs all discoverd', skiprows=3, engine='openpyxl')
         
         if 'powerstate' in df_proxmox.columns:
             df_proxmox = df_proxmox[df_proxmox['powerstate'].str.strip().str.lower() == 'poweredon']
             
         df_proxmox = df_proxmox[~df_proxmox['name'].str.contains('template|replica|migrated', case=False, na=False)]
-        if 'tags' in df_proxmox.columns:
-            df_proxmox = df_proxmox[~df_proxmox['tags'].str.contains('template|replica', case=False, na=False)]
 
-        # Filter Client Assets for Proxmox
-        os_cols_px = ['ostype', 'DiscoveredOsName', 'OsDescription']
-        for col in os_cols_px:
-            if col in df_proxmox.columns:
-                df_proxmox = df_proxmox[~df_proxmox[col].astype(str).str.contains('Windows 10|Windows 11|win10|win11', case=False, na=False)]
-
+     # Filter Client Assets for Proxmox: Exclude rows where 'Microsoft Windows' is directly followed by a number
+        if 'DiscoveredOsName' in df_proxmox.columns:
+            df_proxmox = df_proxmox[~df_proxmox['DiscoveredOsName'].astype(str).str.contains(r'Microsoft Windows \d+', case=False, regex=True, na=False)]
+            
         px_rename_map = {
             'name': 'Name',
             'cluster_node': 'Cluster',
@@ -170,7 +184,6 @@ def process_asset_inventory():
                 'THS_System covered by GRR': 'Unknown',
                 'THS_System covered by Sysmon': 'Unknown',
                 'THS_System logs shipped': 'Unknown',
-                'UUID': 'Unknown'
             }
             new_assets.append(new_row)
             
@@ -178,9 +191,6 @@ def process_asset_inventory():
         df_new = pd.DataFrame(new_assets)
         df_inv = pd.concat([df_inv, df_new], ignore_index=True)
 
-    # Purge historical Windows 10/11 clients from Master Inventory
-    if 'OS' in df_inv.columns:
-        df_inv = df_inv[~df_inv['OS'].astype(str).str.contains(r'Windows 10|Windows 11', case=False, regex=True, na=False)]
 
     # ==========================================
     # STEP 4: MAP THS AGENT COLUMNS
