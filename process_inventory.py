@@ -219,8 +219,8 @@ def process_asset_inventory():
     else:
         print("No THS Agent file detected. Skipping THS mapping.")
 
-    # ==========================================
-    # STEP 5: CLEANUP & SAVE
+# ==========================================
+    # STEP 5: CLEANUP, SAVE & GENERATE LOG
     # ==========================================
     df_inv = df_inv.drop(columns=['Name_lower'])
     df_inv = df_inv.fillna('Unknown')
@@ -229,13 +229,38 @@ def process_asset_inventory():
     out_file = 'Asset_Inventory_Updated.csv'
     df_inv.to_csv(out_file, index=False)
     
+    # --- NEW LOGIC: Generate Automatic Log ---
+    status_counts = df_inv['Status'].value_counts()
+    existing_count = status_counts.get('Existing', 0)
+    removed_count = status_counts.get('Removed', 0)
+    newly_added_count = status_counts.get('Newly Added', 0)
+    
+    # Create beautifully formatted Markdown content
+    log_content = f"""## 📊 Asset Inventory Update Summary
+    
+**Status Breakdown:**
+* 🟢 **Existing (Matched):** {existing_count}
+* 🔴 **Removed (Missing):** {removed_count}
+* 🔵 **Newly Added:** {newly_added_count}
+
+**Total assets in updated inventory:** {len(df_inv)}
+"""
+    
+    # 1. Save to a persistent Markdown file in the repository
+    with open('Update_Log.md', 'w', encoding='utf-8') as f:
+        f.write(log_content)
+        
+    # 2. Push to GitHub Actions Step Summary UI (if running inside GitHub)
+    if "GITHUB_STEP_SUMMARY" in os.environ:
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding='utf-8') as f:
+            f.write(log_content)
+    
     print("\n===============================")
     print("   UPDATE PROCESS COMPLETED!   ")
     print("===============================\n")
-    print("--- Final Inventory Status Summary ---")
-    print(df_inv['Status'].value_counts())
-    print(f"\nTotal rows in updated inventory: {len(df_inv)}")
-    print(f"File successfully saved as: '{out_file}'")
+    print(log_content)
+    print(f"Data successfully saved as: '{out_file}'")
+    print("Log successfully saved as: 'Update_Log.md'")
 
 if __name__ == "__main__":
     process_asset_inventory()
