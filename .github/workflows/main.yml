@@ -1,31 +1,46 @@
 name: 自动处理新的 Excel 文件
+name: Auto-Update Asset Inventory
 
-# 1. 触发条件
+# This tells GitHub to run the script ONLY when these specific files are pushed/updated
 on:
   push:
-    branches:
-      - main # 监控 main 分支
     paths:
-      - 'data/**/*.xlsx' # 核心秘诀：只有当 data 文件夹下的 .xlsx 文件被新增或修改时，才触发！
-      - 'data/**/*.xls'  # 兼容老版本的 Excel 格式
+      - 'Asset_Inventory.csv'
+      - '*vSphere World.csv'
+      - '*VMs all discovered.csv'
+      - '*latest_agents*.csv'
+      - 'process_inventory.py'
 
 jobs:
-  run-python-script:
-    runs-on: ubuntu-latest 
-    
+  run-inventory-script:
+    runs-on: ubuntu-latest # Spins up a temporary Linux server
+
     steps:
-      - name: 1. 检出代码 (把你的文件下载到云端服务器)
-        uses: actions/checkout@v4
-        
-      - name: 2. 安装 Python 环境
-        uses: actions/setup-python@v5
+      # 1. Download your repository files onto the server
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # 2. Install Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
-          
-      - name: 3. 安装必要的 Python 库 (例如处理 Excel 常用的库)
+          python-version: '3.10'
+
+      # 3. Install Pandas and Numpy
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas openpyxl # 如果你的脚本用到这些库，必须在这里安装
-          
-      - name: 4. 执行你的 Python 脚本
-        run: python process_data.py
+          pip install pandas numpy
+
+      # 4. Run the data processing script
+      - name: Execute Python Script
+        run: python process_inventory.py
+
+      # 5. Automatically commit the newly generated file back to your repository
+      - name: Commit and Push Updated File
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add Asset_Inventory_Updated.csv
+          git commit -m "Automated update of Asset_Inventory_Updated.csv" || echo "No changes to commit"
+          git push
