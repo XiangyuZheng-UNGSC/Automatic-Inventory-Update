@@ -36,8 +36,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy
-
+          pip install pandas numpy openpyxl
       # 4. Run the data processing script
       - name: Execute Python Script
         run: python process_inventory.py
