@@ -1,8 +1,8 @@
 ## 📊 Asset Inventory Update Summary
     
 **Status Breakdown:**
-* 🟢 **Existing (Matched):** 0
-* 🔴 **Removed (Missing):** 2988
-* 🔵 **Newly Added:** 0
+* 🟢 **Existing (Matched):** 1482
+* 🔴 **Removed (Missing):** 1506
+* 🔵 **Newly Added:** 179
 
-**Total assets in updated inventory:** 2988
+**Total assets in updated inventory:** 3167
