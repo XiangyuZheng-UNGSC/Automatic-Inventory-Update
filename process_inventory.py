@@ -105,7 +105,7 @@ def process_asset_inventory():
         if proxmox_file.endswith('.csv'):
             df_proxmox = pd.read_csv(proxmox_file, skiprows=3, engine='python', on_bad_lines='warn')
         else:
-            df_proxmox = pd.read_excel(proxmox_file, sheet_name='VMs all discoverd', skiprows=3, engine='openpyxl')
+            df_proxmox = pd.read_excel(proxmox_file, sheet_name='VMs all discovered', skiprows=3, engine='openpyxl')
         
         if 'powerstate' in df_proxmox.columns:
             df_proxmox = df_proxmox[df_proxmox['powerstate'].str.strip().str.lower() == 'poweredon']
