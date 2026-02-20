@@ -35,11 +35,11 @@ jobs:
       - name: Execute Python Script
         run: python process_inventory.py
 
-      # 5. Automatically commit the newly generated file back to your repository
-      - name: Commit and Push Updated File
+# 5. Automatically commit the newly generated files back to your repository
+      - name: Commit and Push Updated Files
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          git add Asset_Inventory_Updated.csv
-          git commit -m "Automated update of Asset_Inventory_Updated.csv" || echo "No changes to commit"
+          git add Asset_Inventory_Updated.csv Update_Log.md 
+          git commit -m "Automated update of Asset Inventory and Log" || echo "No changes to commit"
           git push
