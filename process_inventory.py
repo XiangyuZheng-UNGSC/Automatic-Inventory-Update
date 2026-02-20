@@ -3,30 +3,34 @@ import numpy as np
 import glob
 import os
 
-# Helper function: Automatically find the latest file matching a pattern
-def get_latest_file(pattern):
-    files = glob.glob(pattern)
+# Helper function: Automatically find the latest file matching multiple patterns
+def get_latest_file(patterns):
+    files = []
+    # Loop through both .csv and .xlsx patterns
+    for pattern in patterns:
+        files.extend(glob.glob(pattern))
+    
     if not files:
         return None
-    # Sort by modification time and return the latest file
+    # Sort by modification time and return the absolute latest file
     return max(files, key=os.path.getmtime)
 
 def process_asset_inventory():
     print("Starting smart scan and loading data sources...")
     
-    # 1. Load the Master Inventory (Assuming this filename is constant)
+    # 1. Load the Master Inventory
     inv_file = 'Asset_Inventory.csv'
     if not os.path.exists(inv_file):
         print(f"FATAL ERROR: Cannot find master inventory '{inv_file}'. Script terminated.")
         return
     df_inv = pd.read_csv(inv_file, engine='python', on_bad_lines='warn')
 
-    # Dynamically fetch the latest source files
-    vmware_file = get_latest_file('*VM Inventory.csv')
-    proxmox_file = get_latest_file('*Proxmox*.csv')
-    ths_file = get_latest_file('*latest_agents*.csv')
+    # Dynamically fetch the latest source files (Checking BOTH csv and xlsx)
+    vmware_file = get_latest_file(['*VM Inventory*.csv', '*VM Inventory*.xlsx'])
+    proxmox_file = get_latest_file(['*Proxmox*.csv', '*Proxmox*.xlsx'])
+    ths_file = get_latest_file(['*latest_agents*.csv', '*latest_agents*.xlsx'])
 
-    # Prepare empty dataframes in case a file is missing
+    # Prepare empty dataframes
     df_vmware_final = pd.DataFrame()
     df_proxmox_final = pd.DataFrame()
 
@@ -35,20 +39,24 @@ def process_asset_inventory():
     # ==========================================
     if vmware_file:
         print(f"Found VMware file: {vmware_file}. Processing...")
-        df_vmware = pd.read_csv(vmware_file, engine='python', on_bad_lines='warn')
+        # Smart Read: Switch between CSV and Excel based on file extension
+        if vmware_file.endswith('.csv'):
+            df_vmware = pd.read_csv(vmware_file, engine='python', on_bad_lines='warn')
+        else:
+            df_vmware = pd.read_excel(vmware_file, engine='openpyxl')
         
         if 'Power state' in df_vmware.columns:
             df_vmware = df_vmware[df_vmware['Power state'].str.strip().str.lower() == 'powered on']
  
         if 'Replica' in df_vmware.columns:
-            df_vmware = df_vmware[df_vmware['Replica'].str.strip().str.lower() == 'False']
+            df_vmware = df_vmware[df_vmware['Replica'].astype(str).str.strip().str.lower() == 'false']
     
         if 'Template' in df_vmware.columns:
-            df_vmware = df_vmware[df_vmware['Template'].str.strip().str.lower() == 'False']
+            df_vmware = df_vmware[df_vmware['Template'].astype(str).str.strip().str.lower() == 'false']
             
         df_vmware = df_vmware[~df_vmware['Name'].str.contains('template|replica|migrated', case=False, na=False)]
         
-        # Filter Client Assets: Exclude rows where 'Microsoft Windows' is directly followed by a number
+        # Filter Client Assets
         if 'OS System' in df_vmware.columns:
             df_vmware = df_vmware[~df_vmware['OS System'].astype(str).str.contains(r'Microsoft Windows \d+', case=False, regex=True, na=False)]
 
@@ -69,15 +77,12 @@ def process_asset_inventory():
         if 'Cluster' in df_vmware_final.columns:
             cluster_upper = df_vmware_final['Cluster'].astype(str).str.upper()
             
-            # Condition for Valencia: Starts with 'VLC', exactly matches 'DFS-VCS-51', or contains 'EDCV'
             cond_valencia = (
                 cluster_upper.str.startswith('VLC') | 
                 (cluster_upper == 'DFS-VCS-51') | 
                 cluster_upper.str.contains('EDCV', na=False)
             )
             
-            # Condition for Brindisi: Starts with 'BDS', exactly matches 'DFS-VCS-01', 
-            # or contains 'EDC' (but explicitly MUST NOT contain 'EDCV' to prevent overlap)
             cond_brindisi = (
                 cluster_upper.str.startswith('BDS') | 
                 (cluster_upper == 'DFS-VCS-01') | 
@@ -95,16 +100,19 @@ def process_asset_inventory():
     # STEP 2: PROXMOX PROCESSING LOGIC
     # ==========================================
     if proxmox_file:
-        print(f"Found Proxmox Excel file: {proxmox_file}. Processing specific sheet...")
-        # Read the specific sheet and skip the first 3 rows
-        df_proxmox = pd.read_excel(proxmox_file, sheet_name='VMs all discoverd', skiprows=3, engine='openpyxl')
+        print(f"Found Proxmox file: {proxmox_file}. Processing...")
+        # Smart Read: Handle both CSV and Excel, keeping the skiprows logic
+        if proxmox_file.endswith('.csv'):
+            df_proxmox = pd.read_csv(proxmox_file, skiprows=3, engine='python', on_bad_lines='warn')
+        else:
+            df_proxmox = pd.read_excel(proxmox_file, sheet_name='VMs all discoverd', skiprows=3, engine='openpyxl')
         
         if 'powerstate' in df_proxmox.columns:
             df_proxmox = df_proxmox[df_proxmox['powerstate'].str.strip().str.lower() == 'poweredon']
             
         df_proxmox = df_proxmox[~df_proxmox['name'].str.contains('template|replica|migrated', case=False, na=False)]
 
-     # Filter Client Assets for Proxmox: Exclude rows where 'Microsoft Windows' is directly followed by a number
+        # Filter Client Assets for Proxmox
         if 'DiscoveredOsName' in df_proxmox.columns:
             df_proxmox = df_proxmox[~df_proxmox['DiscoveredOsName'].astype(str).str.contains(r'Microsoft Windows \d+', case=False, regex=True, na=False)]
             
@@ -146,13 +154,11 @@ def process_asset_inventory():
     print("Comparing and updating Master Asset Inventory...")
     source_assets = {}
     
-    # Safe to iterate even if dataframes are empty
     for _, row in df_vmware_final.iterrows():
         source_assets[str(row['Name']).strip().lower()] = row.to_dict()
     for _, row in df_proxmox_final.iterrows():
         source_assets[str(row['Name']).strip().lower()] = row.to_dict()
 
-    # Create lowercase match key
     df_inv['Name_lower'] = df_inv['VM_Name'].astype(str).str.strip().str.lower()
     inv_names = set(df_inv['Name_lower'])
     
@@ -191,18 +197,22 @@ def process_asset_inventory():
         df_new = pd.DataFrame(new_assets)
         df_inv = pd.concat([df_inv, df_new], ignore_index=True)
 
-
     # ==========================================
     # STEP 4: MAP THS AGENT COLUMNS
     # ==========================================
     if ths_file:
         print(f"Found THS Agent file: {ths_file}. Mapping data...")
-        df_ths = pd.read_csv(ths_file, skiprows=3, engine='python', on_bad_lines='warn')
+        # Smart Read: Handle both CSV and Excel
+        if ths_file.endswith('.csv'):
+            df_ths = pd.read_csv(ths_file, skiprows=3, engine='python', on_bad_lines='warn')
+        else:
+            # If it's an Excel file, load 'Sheet2' as specified in original file names
+            df_ths = pd.read_excel(ths_file, sheet_name='Sheet2', skiprows=3, engine='openpyxl')
+            
         df_ths['Match_Name'] = df_ths['Hostname'].astype(str).str.strip().str.lower()
         df_ths = df_ths.drop_duplicates(subset=['Match_Name'])
         ths_dict = df_ths.set_index('Match_Name').to_dict('index')
 
-        # Ensure 'Name_lower' covers any newly added rows
         df_inv['Name_lower'] = df_inv['VM_Name'].astype(str).str.strip().str.lower()
 
         def apply_ths_data(row):
@@ -219,7 +229,7 @@ def process_asset_inventory():
     else:
         print("No THS Agent file detected. Skipping THS mapping.")
 
-# ==========================================
+    # ==========================================
     # STEP 5: CLEANUP, SAVE & GENERATE LOG
     # ==========================================
     df_inv = df_inv.drop(columns=['Name_lower'])
@@ -229,13 +239,12 @@ def process_asset_inventory():
     out_file = 'Asset_Inventory_Updated.csv'
     df_inv.to_csv(out_file, index=False)
     
-    # --- NEW LOGIC: Generate Automatic Log ---
+    # --- AUTOMATIC LOG GENERATION ---
     status_counts = df_inv['Status'].value_counts()
     existing_count = status_counts.get('Existing', 0)
     removed_count = status_counts.get('Removed', 0)
     newly_added_count = status_counts.get('Newly Added', 0)
     
-    # Create beautifully formatted Markdown content
     log_content = f"""## 📊 Asset Inventory Update Summary
     
 **Status Breakdown:**
@@ -246,11 +255,9 @@ def process_asset_inventory():
 **Total assets in updated inventory:** {len(df_inv)}
 """
     
-    # 1. Save to a persistent Markdown file in the repository
     with open('Update_Log.md', 'w', encoding='utf-8') as f:
         f.write(log_content)
         
-    # 2. Push to GitHub Actions Step Summary UI (if running inside GitHub)
     if "GITHUB_STEP_SUMMARY" in os.environ:
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding='utf-8') as f:
             f.write(log_content)
