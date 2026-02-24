@@ -232,11 +232,15 @@ def process_asset_inventory():
     # ==========================================
     # STEP 5: CLEANUP, SAVE & GENERATE LOG
     # ==========================================
-    df_inv = df_inv.drop(columns=['Name_lower'])
+
+    if 'Name_lower' in df_inv.columns:
+        df_inv = df_inv.drop(columns=['Name_lower'])
+        
     df_inv = df_inv.fillna('Unknown')
     df_inv = df_inv.replace([np.nan, '-', '', ' ', '- '], 'Unknown')
     
-    out_file = 'Asset_Inventory_Updated.csv'
+    # OVERWRITE LOGIC: Set out_file to the same name as inv_file
+    out_file = 'Asset_Inventory.csv' 
     df_inv.to_csv(out_file, index=False)
     
     # --- AUTOMATIC LOG GENERATION ---
